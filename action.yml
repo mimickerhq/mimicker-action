@@ -59,7 +59,8 @@ runs:
           SERVE_ARGS="${SERVE_ARGS} --config ${{ github.workspace }}/${{ inputs.config }}"
         fi
 
-        nohup mimicker serve $SERVE_ARGS > /tmp/mimicker-${PORT}.log 2>&1 &
+        MIMICKER_BIN="$(python -c 'import sysconfig; print(sysconfig.get_path("scripts"))')/mimicker"
+        nohup "$MIMICKER_BIN" serve $SERVE_ARGS > /tmp/mimicker-${PORT}.log 2>&1 &
         echo $! > /tmp/mimicker-${PORT}.pid
         echo "Mimicker PID: $(cat /tmp/mimicker-${PORT}.pid)"
 
