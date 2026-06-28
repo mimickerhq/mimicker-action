@@ -37,15 +37,6 @@ runs:
       with:
         python-version: '3.12'
 
-    - name: Install Mimicker
-      shell: bash
-      run: |
-        if [ -n "${{ inputs.version }}" ]; then
-          pip install --quiet "mimicker==${{ inputs.version }}"
-        else
-          pip install --quiet mimicker
-        fi
-
     - name: Start Mimicker
       id: start
       shell: bash
@@ -53,14 +44,21 @@ runs:
         PORT="${{ inputs.port }}"
         TIMEOUT="${{ inputs.wait-timeout }}"
 
-        SERVE_ARGS="--port ${PORT}"
+        # Install — pin the Python we use so pip and the server share the same interpreter
+        PYTHON=$(which python)
+        if [ -n "${{ inputs.version }}" ]; then
+          "$PYTHON" -m pip install --quiet "mimicker==${{ inputs.version }}"
+        else
+          "$PYTHON" -m pip install --quiet mimicker
+        fi
 
+        SERVE_ARGS="--port ${PORT}"
         if [ -n "${{ inputs.config }}" ]; then
           SERVE_ARGS="${SERVE_ARGS} --config ${{ github.workspace }}/${{ inputs.config }}"
         fi
 
         printf 'from mimicker.cli import main\nmain()\n' > /tmp/mimicker_run.py
-        nohup python /tmp/mimicker_run.py serve $SERVE_ARGS > /tmp/mimicker-${PORT}.log 2>&1 &
+        nohup "$PYTHON" /tmp/mimicker_run.py serve $SERVE_ARGS > /tmp/mimicker-${PORT}.log 2>&1 &
         echo $! > /tmp/mimicker-${PORT}.pid
         echo "Mimicker PID: $(cat /tmp/mimicker-${PORT}.pid)"
 
