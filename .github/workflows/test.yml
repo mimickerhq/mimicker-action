@@ -1,0 +1,54 @@
+name: Test Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-no-config:
+    name: Test — no stubs file
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Mimicker
+        id: mock
+        uses: ./
+        with:
+          port: 8080
+
+      - name: Health check
+        run: curl -sf ${{ steps.mock.outputs.url }}/__mimicker__/health
+
+  test-with-config:
+    name: Test — with stubs file
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write a test stubs file
+        run: |
+          mkdir -p stubs
+          cat > stubs/test.yaml <<'EOF'
+          routes:
+            - method: GET
+              path: /hello
+              status: 200
+              body:
+                message: Hello from Mimicker
+          EOF
+
+      - name: Start Mimicker
+        id: mock
+        uses: ./
+        with:
+          port: 9090
+          config: stubs/test.yaml
+
+      - name: Hit the stub
+        run: |
+          RESPONSE=$(curl -sf ${{ steps.mock.outputs.url }}/hello)
+          echo "$RESPONSE"
+          echo "$RESPONSE" | grep -q "Hello from Mimicker"
