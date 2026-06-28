@@ -16,9 +16,9 @@ inputs:
     required: false
     default: ''
   version:
-    description: 'Mimicker Docker image tag to use'
+    description: 'Mimicker PyPI version to install (e.g. "0.4.2"). Defaults to latest.'
     required: false
-    default: 'latest'
+    default: ''
   wait-timeout:
     description: 'Seconds to wait for the server to become healthy'
     required: false
@@ -32,24 +32,36 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Mimicker
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then
+          pip install --quiet "mimicker==${{ inputs.version }}"
+        else
+          pip install --quiet mimicker
+        fi
+
     - name: Start Mimicker
       id: start
       shell: bash
       run: |
         PORT="${{ inputs.port }}"
-        VERSION="${{ inputs.version }}"
         TIMEOUT="${{ inputs.wait-timeout }}"
 
-        DOCKER_ARGS="-d --rm --name mimicker-$PORT \
-          -p ${PORT}:${PORT} \
-          -e MIMICKER_PORT=${PORT}"
+        SERVE_ARGS="--port ${PORT}"
 
         if [ -n "${{ inputs.config }}" ]; then
-          STUB_PATH="${{ github.workspace }}/${{ inputs.config }}"
-          DOCKER_ARGS="${DOCKER_ARGS} -v ${STUB_PATH}:/config/stubs.yaml:ro"
+          SERVE_ARGS="${SERVE_ARGS} --config ${{ github.workspace }}/${{ inputs.config }}"
         fi
 
-        docker run $DOCKER_ARGS ghcr.io/mimickerhq/mimicker:${VERSION}
+        nohup mimicker serve $SERVE_ARGS > /tmp/mimicker-${PORT}.log 2>&1 &
+        echo $! > /tmp/mimicker-${PORT}.pid
+        echo "Mimicker PID: $(cat /tmp/mimicker-${PORT}.pid)"
 
         echo "Waiting for Mimicker to be ready on port ${PORT}..."
         HEALTH="http://localhost:${PORT}/__mimicker__/health"
@@ -60,7 +72,7 @@ runs:
           fi
           if [ "$i" -eq "$TIMEOUT" ]; then
             echo "Mimicker did not become healthy within ${TIMEOUT}s." >&2
-            docker logs mimicker-$PORT >&2 || true
+            cat /tmp/mimicker-${PORT}.log >&2
             exit 1
           fi
           sleep 1
