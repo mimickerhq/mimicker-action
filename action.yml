@@ -59,11 +59,7 @@ runs:
           SERVE_ARGS="${SERVE_ARGS} --config ${{ github.workspace }}/${{ inputs.config }}"
         fi
 
-        # Write a tiny launcher so we don't depend on the scripts dir being on PATH
-        python -c "
-with open('/tmp/mimicker_run.py', 'w') as f:
-    f.write('from mimicker.cli import main\nmain()\n')
-"
+        printf 'from mimicker.cli import main\nmain()\n' > /tmp/mimicker_run.py
         nohup python /tmp/mimicker_run.py serve $SERVE_ARGS > /tmp/mimicker-${PORT}.log 2>&1 &
         echo $! > /tmp/mimicker-${PORT}.pid
         echo "Mimicker PID: $(cat /tmp/mimicker-${PORT}.pid)"
