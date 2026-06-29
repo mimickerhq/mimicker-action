@@ -49,6 +49,43 @@ steps:
 - run: curl ${{ steps.mock.outputs.url }}/my-endpoint
 ```
 
+### Stub coverage report (detect test decay)
+
+After your tests run, call the report script to get a summary of which stubs were hit and which were never exercised. The report is written to the GitHub Actions job summary.
+
+```yaml
+- uses: actions/checkout@v4
+
+- uses: mimickerhq/mimicker-action@v1
+  id: mock
+  with:
+    config: stubs/api.yaml
+
+- name: Run tests
+  run: pytest
+
+- name: Mimicker coverage report
+  if: always()
+  run: bash ${{ steps.mock.outputs.report-script }}
+```
+
+Add `fail-on-unused: true` to fail the job if any stub was never hit:
+
+```yaml
+- uses: mimickerhq/mimicker-action@v1
+  id: mock
+  with:
+    config: stubs/api.yaml
+    fail-on-unused: true
+
+- name: Run tests
+  run: pytest
+
+- name: Mimicker coverage report
+  if: always()
+  run: bash ${{ steps.mock.outputs.report-script }}
+```
+
 ---
 
 ## Inputs
@@ -59,12 +96,14 @@ steps:
 | `config` | Path to a stubs YAML file (relative to repo root) | — |
 | `version` | Mimicker Docker image tag | `latest` |
 | `wait-timeout` | Seconds to wait for the server to become healthy | `30` |
+| `fail-on-unused` | Fail the job if any stubs were never hit (detects test decay) | `false` |
 
 ## Outputs
 
 | Output | Description |
 |---|---|
 | `url` | Base URL of the running server, e.g. `http://localhost:8080` |
+| `report-script` | Path to a shell script that writes the stub coverage report to the job summary. Call it with `if: always()` after your tests. |
 
 ---
 

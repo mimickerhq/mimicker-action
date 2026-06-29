@@ -23,11 +23,18 @@ inputs:
     description: 'Seconds to wait for the server to become healthy'
     required: false
     default: '30'
+  fail-on-unused:
+    description: 'Fail the job if any stubs were never hit (detects test decay)'
+    required: false
+    default: 'false'
 
 outputs:
   url:
     description: 'Base URL of the running Mimicker server (e.g. http://localhost:8080)'
     value: ${{ steps.start.outputs.url }}
+  report-script:
+    description: 'Path to a shell script that prints the stub coverage report. Call it with if: always() after your tests.'
+    value: ${{ steps.start.outputs.report-script }}
 
 runs:
   using: composite
@@ -43,8 +50,9 @@ runs:
       run: |
         PORT="${{ inputs.port }}"
         TIMEOUT="${{ inputs.wait-timeout }}"
+        FAIL_ON_UNUSED="${{ inputs.fail-on-unused }}"
 
-        # Install — pin the Python we use so pip and the server share the same interpreter
+        # Pin the Python interpreter so pip install and the server share the same one
         PYTHON=$(which python)
         if [ -n "${{ inputs.version }}" ]; then
           "$PYTHON" -m pip install --quiet "mimicker==${{ inputs.version }}"
@@ -77,4 +85,31 @@ runs:
           sleep 1
         done
 
+        # Write a report script that callers can invoke with `if: always()`
+        REPORT_SCRIPT="/tmp/mimicker-report-${PORT}.sh"
+        cat > "$REPORT_SCRIPT" <<REPORT_EOF
+#!/bin/sh
+set -e
+REPORT_URL="http://localhost:${PORT}/__mimicker__/report"
+REPORT_JSON=\$(curl -sf "\$REPORT_URL" || echo "")
+if [ -z "\$REPORT_JSON" ]; then
+  echo "Mimicker report: server not reachable at \$REPORT_URL" >> "\$GITHUB_STEP_SUMMARY"
+  exit 0
+fi
+
+# Write github-summary format to step summary
+"$PYTHON" /tmp/mimicker_run.py report --url "http://localhost:${PORT}" --format github-summary >> "\$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+# Optionally fail on unused stubs
+if [ "${FAIL_ON_UNUSED}" = "true" ]; then
+  UNUSED=\$(echo "\$REPORT_JSON" | "$PYTHON" -c "import sys,json; d=json.load(sys.stdin); print(len(d['unused_stubs']))")
+  if [ "\$UNUSED" -gt 0 ]; then
+    echo "::error::Mimicker: \$UNUSED stub(s) were never hit — possible test decay." >&2
+    exit 1
+  fi
+fi
+REPORT_EOF
+        chmod +x "$REPORT_SCRIPT"
+
         echo "url=http://localhost:${PORT}" >> "$GITHUB_OUTPUT"
+        echo "report-script=${REPORT_SCRIPT}" >> "$GITHUB_OUTPUT"
