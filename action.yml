@@ -1,4 +1,4 @@
-name: 'Mimicker'
+name: 'Mimicker Mock Server'
 description: 'Start a Mimicker HTTP mock server for use in CI workflows'
 author: 'mimickerhq'
 
