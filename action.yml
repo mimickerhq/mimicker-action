@@ -87,28 +87,26 @@ runs:
 
         # Write a report script that callers can invoke with `if: always()`
         REPORT_SCRIPT="/tmp/mimicker-report-${PORT}.sh"
-        cat > "$REPORT_SCRIPT" <<REPORT_EOF
-#!/bin/sh
-set -e
-REPORT_URL="http://localhost:${PORT}/__mimicker__/report"
-REPORT_JSON=\$(curl -sf "\$REPORT_URL" || echo "")
-if [ -z "\$REPORT_JSON" ]; then
-  echo "Mimicker report: server not reachable at \$REPORT_URL" >> "\$GITHUB_STEP_SUMMARY"
-  exit 0
-fi
-
-# Write github-summary format to step summary
-"$PYTHON" /tmp/mimicker_run.py report --url "http://localhost:${PORT}" --format github-summary >> "\$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-
-# Optionally fail on unused stubs
-if [ "${FAIL_ON_UNUSED}" = "true" ]; then
-  UNUSED=\$(echo "\$REPORT_JSON" | "$PYTHON" -c "import sys,json; d=json.load(sys.stdin); print(len(d['unused_stubs']))")
-  if [ "\$UNUSED" -gt 0 ]; then
-    echo "::error::Mimicker: \$UNUSED stub(s) were never hit — possible test decay." >&2
-    exit 1
-  fi
-fi
-REPORT_EOF
+        {
+          echo '#!/bin/sh'
+          echo 'set -e'
+          echo "MIMICKER_URL=\"http://localhost:${PORT}\""
+          echo "MIMICKER_PYTHON=\"${PYTHON}\""
+          echo "FAIL_ON_UNUSED=\"${FAIL_ON_UNUSED}\""
+          echo 'REPORT_JSON=$(curl -sf "${MIMICKER_URL}/__mimicker__/report" || echo "")'
+          echo 'if [ -z "$REPORT_JSON" ]; then'
+          echo '  echo "Mimicker report: server not reachable" >> "$GITHUB_STEP_SUMMARY"'
+          echo '  exit 0'
+          echo 'fi'
+          echo '"${MIMICKER_PYTHON}" /tmp/mimicker_run.py report --url "${MIMICKER_URL}" --format github-summary >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true'
+          echo 'if [ "${FAIL_ON_UNUSED}" = "true" ]; then'
+          echo '  UNUSED=$(echo "$REPORT_JSON" | "${MIMICKER_PYTHON}" -c "import sys,json; d=json.load(sys.stdin); print(len(d[\"unused_stubs\"]))")'
+          echo '  if [ "$UNUSED" -gt 0 ]; then'
+          echo '    echo "::error::Mimicker: $UNUSED stub(s) were never hit." >&2'
+          echo '    exit 1'
+          echo '  fi'
+          echo 'fi'
+        } > "$REPORT_SCRIPT"
         chmod +x "$REPORT_SCRIPT"
 
         echo "url=http://localhost:${PORT}" >> "$GITHUB_OUTPUT"
